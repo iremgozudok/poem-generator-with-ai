@@ -2,6 +2,7 @@ import express from "express";
 import fetch from "node-fetch";
 import dotenv from "dotenv";
 import cors from "cors";
+import { mockData } from "./mockData";
 
 dotenv.config();
 
@@ -12,68 +13,15 @@ app.use(cors({ origin: "http://localhost:5173" })); // frontend adresine göre a
 const OPENAI_KEY = process.env.OPENAI_API_KEY || "";
 const useOpenAI = Boolean(OPENAI_KEY);
 
-// Mock data
-const siirler = {
-  "Aşk": {
-    "Neşeli": [
-      "Güneş gibi parlak sevginle",
-      "Her sabah yeniden doğuyorum",
-      "Kalbimde çiçekler açıyor",
-      "Seninle her şey güzel"
-    ],
-    "Hüzünlü": [
-      "Uzaklarda kaybolmuş sevgi",
-      "Anılar acıtıyor kalbimi",
-      "Yalnızlık sardı dört yanımı",
-      "Seni özlüyorum her gece"
-    ],
-    "Derin": [
-      "Sevginin derinliklerinde",
-      "Ruhumun en gizli köşelerinde",
-      "Seninle bir oluyoruz",
-      "Zaman duruyor aramızda"
-    ],
-    "Gizemli": [
-      "Gecenin karanlığında",
-      "Gizli bir aşk hikayesi",
-      "Kimse bilmiyor gerçeği",
-      "Sadece sen ve ben"
-    ]
-  },
-  "Doğa": {
-    "Neşeli": [
-      "Bahar geldi çiçekler açtı",
-      "Kuşlar şarkı söylüyor",
-      "Güneş ışıldıyor gökyüzünde",
-      "Doğa canlandı yeniden"
-    ],
-    "Hüzünlü": [
-      "Sonbahar yaprakları düşüyor",
-      "Hüzün sardı doğayı",
-      "Güneş gizlendi bulutların arkasına",
-      "Yalnızlık sardı ormanı"
-    ],
-    "Derin": [
-      "Dağların sessizliğinde",
-      "Okyanusun derinliklerinde",
-      "Doğanın gizli gücü",
-      "Bizi sarıyor her yerde"
-    ],
-    "Gizemli": [
-      "Ay ışığında gizli orman",
-      "Sisler arasında kaybolmuş yol",
-      "Doğanın sırları",
-      "Kimse çözemiyor"
-    ]
-  }
-};
-
 app.post("/generate-poem", async (req, res) => {
+  const { tema = "Aşk", duygu = "Hüzünlü", uzunluk = "Kısa", tur = "siir" } = req.body;
+  
   try {
-    const { tema = "Aşk", duygu = "Hüzünlü", uzunluk = "Kısa", tur = "siir" } = req.body;
 
-    // Eğer OpenAI anahtarı varsa AI üzerinden üret, yoksa fallback şiirleri kullan
+        // Eğer OpenAI anahtarı varsa AI üzerinden üretmeyi dene
     if (useOpenAI) {
+      console.log("OpenAI anahtarı bulundu, AI üretimi deneniyor...");
+      
       // Prompt oluştur
       let prompt = "";
       if (tur === "siir") {
@@ -88,7 +36,7 @@ app.post("/generate-poem", async (req, res) => {
 
       // OpenAI çağrısı
       const payload = {
-        model: "gpt-3.5-turbo", // Daha ucuzsa bunu kullan. İstersen "gpt-4" ile değiştir (daha pahalıdır).
+        model: "gpt-3.5-turbo",
         messages: [
           {
             role: "user",
@@ -111,29 +59,52 @@ app.post("/generate-poem", async (req, res) => {
       const data = await response.json() as any;
 
       if (!response.ok) {
-        // Kotayı aşma gibi hataları doğrudan ilet
-        return res.status(response.status).json({ error: data.error?.message || "OpenAI hata" });
+        // OpenAI hatası durumunda fallback sistemine geç
+        console.log("OpenAI hatası, fallback sistemine geçiliyor:", data.error?.message);
+        // return ile durdurmuyoruz, fallback sistemine devam ediyoruz
+      } else {
+        const text = data.choices?.[0]?.message?.content || "";
+        return res.json({ text: text.trim(), source: "openai" });
       }
-
-      const text = data.choices?.[0]?.message?.content || "";
-      return res.json({ text: text.trim() });
+    } else {
+      console.log("OpenAI anahtarı bulunamadı, fallback sistemine geçiliyor...");
     }
-
-    // --- fallback: sabit şiirlerden rastgele seç ve döndür ---
-    const temaSiirleri = (siirler as any)[tema] || siirler["Aşk"];
-    const duyguSiirleri = temaSiirleri[duygu] || temaSiirleri["Hüzünlü"];
-
-    const secilenSiirler: string[] = [];
-    for (let i = 0; i < 4; i++) {
-      const rastgeleIndex = Math.floor(Math.random() * duyguSiirleri.length);
-      secilenSiirler.push(duyguSiirleri[rastgeleIndex]);
-    }
-
-    const text = secilenSiirler.join("\n");
-    res.json({ text });
   } catch (err: any) {
-    console.error("Hata:", err);
-    res.status(500).json({ error: "Sunucu hatası" });
+    console.error("OpenAI hatası, fallback sistemine geçiliyor:", err);
+    // Hata durumunda da fallback sistemine geç
+  }
+
+  // --- fallback: sabit içeriklerden rastgele seç ve döndür ---
+  const turData = (mockData as any)[tur] || mockData.siir;
+  const temaData = turData[tema] || turData["Aşk"];
+  const duyguData = temaData[duygu] || temaData["Hüzünlü"];
+  const uzunlukData = duyguData[uzunluk] || duyguData["Kısa"];
+
+  if (uzunlukData && uzunlukData.length > 0) {
+    const rastgeleIndex = Math.floor(Math.random() * uzunlukData.length);
+    const text = uzunlukData[rastgeleIndex];
+    res.json({ text, source: "fallback" });
+  } else {
+    // Eğer veri bulunamazsa varsayılan bir metin döndür
+    const defaultText = tur === "siir" 
+      ? uzunluk === "Kısa" 
+        ? "Güzel bir gün\nGüneş ışıldıyor\nMutluluk doluyor içim\nHer şey güzel"
+        : uzunluk === "Orta"
+        ? "Güzel bir gün\nGüneş ışıldıyor\nMutluluk doluyor içim\nHer şey güzel\n\nKuşlar şarkı söylüyor\nÇiçekler açıyor\nDoğa canlanıyor\nBahar geldi"
+        : "Güzel bir gün\nGüneş ışıldıyor\nMutluluk doluyor içim\nHer şey güzel\n\nKuşlar şarkı söylüyor\nÇiçekler açıyor\nDoğa canlanıyor\nBahar geldi\n\nRüzgar esiyor\nYapraklar dans ediyor\nHayat güzel\nHer an değerli"
+      : tur === "hikaye"
+      ? uzunluk === "Kısa"
+        ? "Bir zamanlar güzel bir hikaye vardı. Bu hikaye insanların kalbini ısıtıyordu."
+        : uzunluk === "Orta"
+        ? "Bir zamanlar güzel bir hikaye vardı. Bu hikaye insanların kalbini ısıtıyordu. Her gün yeni maceralar yaşanıyor ve hayat güzel anılarla doluyor."
+        : "Bir zamanlar güzel bir hikaye vardı. Bu hikaye insanların kalbini ısıtıyordu. Her gün yeni maceralar yaşanıyor ve hayat güzel anılarla doluyor. Bu hikaye, dostluğun ve sevginin ne kadar önemli olduğunu gösteriyor."
+      : uzunluk === "Kısa"
+        ? "Güzel bir şarkı\nSöylüyor kalbim\nMutluluk doluyor içim\nHer şey güzel\n\nNakarat:\nGüzel bir şarkı\nGüzel bir şarkı"
+        : uzunluk === "Orta"
+        ? "Güzel bir şarkı\nSöylüyor kalbim\nMutluluk doluyor içim\nHer şey güzel\n\nKuşlar eşlik ediyor\nRüzgar sallıyor\nHayat güzel\nHer an değerli\n\nNakarat:\nGüzel bir şarkı\nGüzel bir şarkı"
+        : "Güzel bir şarkı\nSöylüyor kalbim\nMutluluk doluyor içim\nHer şey güzel\n\nKuşlar eşlik ediyor\nRüzgar sallıyor\nHayat güzel\nHer an değerli\n\nGökyüzü mavi\nGüneş parlak\nDünya güzel\nHepimiz mutluyuz\n\nNakarat:\nGüzel bir şarkı\nGüzel bir şarkı";
+    
+    res.json({ text: defaultText, source: "fallback" });
   }
 });
 

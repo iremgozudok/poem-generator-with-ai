@@ -21,6 +21,24 @@
           <option>Gizemli</option>
         </select>
       </div>
+
+      <div>
+        <label class="block mb-1 font-medium">Uzunluk</label>
+        <select v-model="uzunluk" class="w-full border rounded px-2 py-1">
+          <option>Kısa</option>
+          <option>Orta</option>
+          <option>Uzun</option>
+        </select>
+      </div>
+
+      <div>
+        <label class="block mb-1 font-medium">Tür</label>
+        <select v-model="tur" class="w-full border rounded px-2 py-1">
+          <option value="siir">Şiir</option>
+          <option value="hikaye">Hikâye</option>
+          <option value="sarki">Şarkı Sözü</option>
+        </select>
+      </div>
     </div>
 
     <div class="flex gap-2">
@@ -29,13 +47,15 @@
         :disabled="loading"
         class="bg-indigo-600 text-white px-4 py-2 rounded shadow"
       >
-        {{ loading ? "Oluşturuluyor..." : "Şiir Oluştur" }}
+        {{ loading ? "Oluşturuluyor..." : "Oluştur" }}
       </button>
       <button @click="reset" class="border px-4 py-2 rounded">Temizle</button>
     </div>
 
     <div v-if="poem" class="mt-4">
-      <h2 class="text-xl font-semibold mb-2">Oluşan Şiir</h2>
+      <h2 class="text-xl font-semibold mb-2">
+        Oluşan {{ tur === 'siir' ? 'Şiir' : tur === 'hikaye' ? 'Hikâye' : 'Şarkı Sözü' }}
+      </h2>
       <div class="prose">
         <div
           v-for="(line, idx) in animatedLines"
@@ -75,6 +95,8 @@ import { ref } from "vue";
 
 const tema = ref("Aşk");
 const duygu = ref("Hüzünlü");
+const uzunluk = ref("Kısa");
+const tur = ref("siir");
 const poem = ref<string | null>(null);
 const loading = ref(false);
 const error = ref<string | null>(null);
@@ -95,8 +117,8 @@ async function generate() {
       body: JSON.stringify({
         tema: tema.value,
         duygu: duygu.value,
-        uzunluk: "Kısa",
-        tur: "siir",
+        uzunluk: uzunluk.value,
+        tur: tur.value,
       }),
     });
 
@@ -105,6 +127,13 @@ async function generate() {
       throw new Error(data.error || "Üretilemedi");
     }
     poem.value = data.text;
+    
+    // Hangi kaynaktan geldiğini konsola yazdır
+    if (data.source === "openai") {
+      console.log("✅ OpenAI'dan içerik alındı");
+    } else {
+      console.log("📚 Fallback sisteminden içerik alındı");
+    }
 
     const lines = data.text
       .split("\n")
